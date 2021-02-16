@@ -88,16 +88,18 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-// Comparator for timer elemts
+/**
+ * Camparator for timers
+ * 
+ * If they have different wake times, return if a's wait time is greater than b's wait time
+ * If they have the same wake time, return if a has a higher priority than b
+ */
 bool timer_compare(const struct list_elem *a, const struct list_elem *b, void *aux) {
   const struct thread *a_thread = list_entry(a, struct thread, timer_elem);
   const struct thread *b_thread = list_entry(b, struct thread, timer_elem);
 
   if (a_thread->wake_time != b_thread->wake_time) {
-    if (a_thread->wake_time < b_thread->wake_time) 
-      return true;
-    else 
-      return false;
+    return a_thread->wake_time < b_thread->wake_time;
   } else {
     return a_thread->priority > b_thread->priority;
   }
