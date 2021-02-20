@@ -10,6 +10,7 @@
 #include "threads/palloc.h"
 #include "threads/switch.h"
 #include "threads/synch.h"
+#include "threads/malloc.h"
 #include "threads/vaddr.h"
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -202,6 +203,102 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
 
   return tid;
+}
+
+/**
+ * Comparator for threads
+ * 
+ * Uses priority of the threads for a comparison
+ */
+bool priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux) {
+  const struct thread *a_thread = list_entry(a, struct thread, elem);
+  const struct thread *b_thread = list_entry(b, struct thread, elem);
+
+  if (a_thread->priority != b_thread->priority)
+    return a_thread->priority > b_thread->priority;
+  else
+    return false;
+}
+
+int get_largest_donation(struct donation_list_elem *donations, int pri_orig) {
+  if (donations == NULL) return pri_orig;
+  int max = pri_orig;
+  struct donation_list_elem *current = donations;
+  while (current != NULL) {
+    if (current->donated_priority > max) {
+      max = current->donated_priority;
+    }
+    current = current->next;
+  }
+
+  return max;
+}
+
+/**
+ * Donates this threads priority to another thread
+ * 
+ * @param lock lock of the other thread
+ * @param first_level if this is the first call in a recursive donation
+ */
+void donate(struct lock *lock, bool first_level) {
+  struct thread *t;
+  int current_priority = thread_current()->priority;
+
+  if (lock->holder == NULL || current_priority <= lock->holder->priority) return; // Makes sure a thread of a higher priority doesn't get a lower one donated
+
+  struct donation_list_elem *front = (struct donation_list_elem *)malloc(sizeof(struct donation_list_elem *));
+
+  t = lock->holder;
+
+  // Sets up new front of the donation list of the thread being donated to
+  front->donated_priority = current_priority;
+  front->next = t->donations;
+  front->donated_lock = lock;
+  front->donor_thread = thread_current();
+
+  t->donations = front;
+  t->priority = current_priority;
+
+  if (first_level) thread_current()->donatee_lock = lock;
+  if(t->donatee_lock != NULL) donate(t->donatee_lock, false);
+}
+
+/**
+ * Frees donation of the provided lock
+ * 
+ * @param lock donatee to free
+ */
+struct donation_list_elem *free_donations(struct lock *lock) {
+  struct thread *t = thread_current();
+
+  if (t->donations == NULL) return NULL; // returns if there are no donations to free
+
+  struct donation_list_elem *freeable; // ptr to memory to free
+  struct donation_list_elem *current; // current ptr of donations linked list
+  struct donation_list_elem *prev; // prevoius ptr of donations linked list
+
+  current = t->donations; // Sets to the front of the donations list
+
+  while (current != NULL) {
+    if (current->donated_lock == lock) {
+      // cleans up refernces to space we are about to free
+      if (current == t->donations) {
+        t->donations = t->donations->next;
+      } else {
+        prev->next = current->next;
+      }
+      freeable = current;
+      freeable->donor_thread->donatee_lock = NULL;
+      current = current->next;
+      free(freeable);
+    } else {
+      prev = current;
+      current = current->next;
+    }
+  }
+
+  t->priority = get_largest_donation(t->donations, t->priority_orig);
+  return t->donations;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
