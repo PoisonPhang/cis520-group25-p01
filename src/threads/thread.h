@@ -148,7 +148,8 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
-bool priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux);
+bool priority_compare_sema(const struct list_elem *a, const struct list_elem *b, void *aux);
+bool priority_compare_thread (const struct list_elem *a, const struct list_elem *b, void *aux);
 
 void donate(struct lock *lock, bool first_level);
 struct donation_list_elem *free_donations(struct lock *lock);

@@ -71,6 +71,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+int get_largest_donation(struct donation_list_elem *donations, int pri_orig);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -213,18 +214,27 @@ thread_create (const char *name, int priority,
 }
 
 /**
+ * Comparator for semaphores
+ * 
+ * Uses priority_compare_thread with the first thread in the semaphores waiters to compare
+ */
+bool priority_compare_sema(const struct list_elem *a, const struct list_elem *b, void *aux) {
+  const struct semaphore_elem *a_sema = list_entry(a, struct semaphore_elem, elem);
+  const struct semaphore_elem *b_sema = list_entry(b, struct semaphore_elem, elem);
+
+  return priority_compare_thread(list_begin(&a_sema->semaphore.waiters), list_begin(&b_sema->semaphore.waiters), NULL);
+}
+
+/**
  * Comparator for threads
  * 
  * Uses priority of the threads for a comparison
  */
-bool priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux) {
+bool priority_compare_thread(const struct list_elem *a, const struct list_elem *b, void *aux) {
   const struct thread *a_thread = list_entry(a, struct thread, elem);
   const struct thread *b_thread = list_entry(b, struct thread, elem);
 
-  if (a_thread->priority != b_thread->priority)
-    return a_thread->priority > b_thread->priority;
-  else
-    return false;
+  return a_thread->priority > b_thread->priority;
 }
 
 int get_largest_donation(struct donation_list_elem *donations, int pri_orig) {
@@ -445,7 +455,7 @@ thread_set_priority (int new_priority)
   current->priority_orig = new_priority;
   current->priority = get_largest_donation(current->donations, new_priority);
 
-  list_sort(&ready_list, &priority_compare, NULL);
+  list_sort(&ready_list, &priority_compare_thread, NULL);
   
   if (!list_empty(&ready_list)) {
     readyMax = list_entry(list_front(&ready_list), struct thread, elem);
@@ -619,7 +629,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    list_sort(&ready_list, &priority_compare, NULL);
+    list_sort(&ready_list, &priority_compare_thread, NULL);
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
   }
 }
