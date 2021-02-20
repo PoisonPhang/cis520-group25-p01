@@ -235,7 +235,7 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
-
+  
   thread_current()->donations = free_donations(lock);
 
   thread_yield();

@@ -171,6 +171,7 @@ thread_create (const char *name, int priority,
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
+  enum intr_level old_level;
   tid_t tid;
 
   ASSERT (function != NULL);
@@ -183,6 +184,8 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  old_level = intr_disable();
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -199,8 +202,12 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  intr_set_level(old_level);
+
   /* Add to run queue. */
   thread_unblock (t);
+
+  thread_yield();
 
   return tid;
 }
@@ -432,15 +439,21 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *current = thread_current ();
+  struct thread *readyMax;
+
+  current->priority_orig = new_priority;
+  current->priority = get_largest_donation(current->donations, new_priority);
 
   list_sort(&ready_list, &priority_compare, NULL);
+  
+  if (!list_empty(&ready_list)) {
+    readyMax = list_entry(list_front(&ready_list), struct thread, elem);
+  } else {
+    readyMax = idle_thread;
+  }
 
-  // TODO turn off inturrupts?
-
-  struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
-
-  if (t->priority > new_priority)
+  if (readyMax->priority > new_priority)
     thread_yield();
 }
 
@@ -605,8 +618,10 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
+  else {
+    list_sort(&ready_list, &priority_compare, NULL);
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
