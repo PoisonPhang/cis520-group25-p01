@@ -239,8 +239,10 @@ bool priority_compare_thread(const struct list_elem *a, const struct list_elem *
 
 int get_largest_donation(struct donation_list_elem *donations, int pri_orig) {
   if (donations == NULL) return pri_orig;
+
   int max = pri_orig;
   struct donation_list_elem *current = donations;
+  
   while (current != NULL) {
     if (current->donated_priority > max) {
       max = current->donated_priority;
