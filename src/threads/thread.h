@@ -101,7 +101,7 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
     struct semaphore timer_sem;         /* Semaphore */
     int64_t wake_time;                  /* Time for wakeup */
-    struct list_elem timer_elem;
+    struct list_elem timer_elem;        /* List elemt of the timer */
     int priority_orig;
     struct donation_list_elem *donations;
     struct lock *donatee_lock;

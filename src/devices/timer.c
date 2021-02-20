@@ -111,7 +111,7 @@ bool timer_compare(const struct list_elem *a, const struct list_elem *b, void *a
 void
 timer_sleep (int64_t ticks) 
 {
-  //if (ticks <= 0) return; // Only does work for valid tick numers
+  if (ticks <= 0) return; // Only does work for valid tick numers
 
   ASSERT (intr_get_level () == INTR_ON); // Checks that inturrupts are on
 

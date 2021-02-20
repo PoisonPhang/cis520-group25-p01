@@ -1,0 +1,230 @@
+
+CIS 520 - Programming Project #1
+
+                   
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Connor Davis connormdavis99@k-state.edu
+Maria Traskowsky mariatraskowsky@ksu.edu
+Nickolas Appino appino@ksu.edu
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for
+>> the TA, or extra credit, please give them here.
+
+For running test, due the altered QEMU-PintOS install, should be done 
+from the `src/utils` directory with the `.\pintos` command
+
+ex: ./pintos -v -- run alarm-mega
+
+Everything else should be normal
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation,
+>> course text, lecture notes, and course staff.
+
+We used the following repos for inspiration of our code implementation:
+https://github.com/Hindol/pintos/
+https://github.com/austenator/cis520/
+
+
+                 ALARM CLOCK
+                 ===========
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+    thread.h:
+    M struct thread:
+        + struct semaphore timer_sem:  semaphore of the thread
+        + int64_t wake_time:           when to wake the thread
+        + struct list_elem timer_elem: allows thread to be used in a list
+
+    timer.c:
+    timer.c:
+        + static struct list timer_sleep_list: List of threads put to sleep
+
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe what happens in a call to your timer_sleep(),
+>> including the effects of the timer interrupt handler.
+
+    When timer_sleep(int64_t ticks) is called, we make sure a valid number of
+    ticks is provided before doing any work. We then get the current thread and
+    set its wake_time to the current system ticks + desired sleep time in
+    ticks. Then we disable inturrupts before inserting it, in order by
+    wake_time/priority, into the timer_sleep_list. Then we enable inturrupts
+    before setting the semaphore of the current thread to its down state.
+
+    When inturrupts are disabled, the inturrupt handler checks the ordered
+    timer_sleep_list and wakes up any threads that are ready.
+
+>> A3: What steps are taken to minimize the amount of time spent in
+>> the timer interrupt handler?
+
+    The timer_sleep_list is always ordered by wake_time/priority so that it
+    will only iterate over n+1 timers where n is the number of timers that
+    need to be woken up.
+
+
+---- SYNCHRONIZATION ----
+
+>> A4: How are race conditions avoided when multiple threads call
+>> timer_sleep() simultaneously?
+
+    We use intr_disable to make the function operate atomically then set
+    interrupts to their last state.
+
+
+>> A5: How are race conditions avoided when a timer interrupt occurs
+>> during a call to timer_sleep()?
+
+    The timer_interrupt_handler also disables inturrupts during operation
+
+
+---- RATIONALE ----
+
+>> A6: Why did you choose this design?  In what ways is it superior to
+>> other designs that you considered?
+
+    Disabling inturrupts allowed us to avoid dealing with race conditions
+    without writting substantial amounts of additional code. Using an ordered
+    list of threads by waittime/priority allowed us to avoid wasting time in
+    execution.
+
+
+             PRIORITY SCHEDULING
+             ===================
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+    thread.h:
+    + struct donation_list_elem
+        + struct donation_list_elem *next: next element in the list, NULL last.
+        + int donated_priority: priority that was donated.
+        + struct lock *donated_lock: lock of the donation
+        + struct thread *donor_thread: thread that donated its priority
+
+    M struct thread:
+        + int priority_orig:                    original set priority of the
+                                                thread.
+        + struct donation_list_elem *donations: list of donated priorities.
+        + struct lock *donatee_lock:            ptr to the lock that this
+                                                thread donated to.
+
+>> B2: Explain the data structure used to track priority donation.
+
+    We use a easy to navigated linked list called donation_list_elem. This
+    linked list stores 3 pices of data relevant to the donation.
+
+---- ALGORITHMS ----
+
+>> B3: How do you ensure that the highest priority thread waiting for
+>> a lock, semaphore, or condition variable wakes up first?
+
+    By ensuring that the list of threads that are waiting on a lock semaphore,
+    or condition variable is ordered by priority, we ensure that when a thread
+    is woken up from that list, it will be the highest priority thread that is
+    woken up because we wake up the first thread in the ordered list.
+
+>> B4: Describe the sequence of events when a call to lock_acquire()
+>> causes a priority donation.  How is nested donation handled?
+
+    When lock_acquire() is called the donate() function is called passing in
+    the specific lock. Within the donate function error handling occurs to make
+    sure that the lock holder is not null and that the lock priority has a
+    higher priority than the current thread priority. Linked lists are used to
+    handle nested donation. The linked list is traversed until the donate_lock
+    is NULL.
+
+>> B5: Describe the sequence of events when lock_release() is called
+>> on a lock that a higher-priority thread is waiting for.
+
+    Once called, the locks semaphore is put into the up state. After this, we
+    release any donations of the current thread that are related to this lock.
+    Then we yield to the higher priority thread.
+
+---- SYNCHRONIZATION ----
+
+>> B6: Describe a potential race in thread_set_priority() and explain
+>> how your implementation avoids it.  Can you use a lock to avoid
+>> this race?
+
+    A race condition of this function would be if some thread A is interrupted
+    by another thread B as it sets A's priority via donation as thread A is
+    setting its own priority. This could cause the ready list to be sorted
+    with an unexpected value. To avoid this, we disable interrupts before
+    sorting the ready list.
+
+    Locks can be used to do this. However, the overhead of creating a lock and,
+    therefore another donation, is more than simply disabling inturrupts while
+    using and minipulating the ready list.
+
+---- RATIONALE ----
+
+>> B7: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+
+    While this design is mostly inspired by the code on austenator's repo, we
+    wanted to confirm that we were meeting design requirements by yielding a
+    thread if it was set to a priority lower than the current highest in the
+    ready list. In addition to many more syntactical choices to have the
+    code compile more efficiently, we also decided to handle race conditions
+    when setting priority.
+
+
+              ADVANCED SCHEDULER [EXTRA CREDIT]
+              =================================
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+---- ALGORITHMS ----
+
+>> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
+>> has a recent_cpu value of 0.  Fill in the table below showing the
+>> scheduling decision and the priority and recent_cpu values for each
+>> thread after each given number of timer ticks:
+
+timer  recent_cpu    priority   thread
+ticks   A   B   C   A   B   C   to run
+-----  --  --  --  --  --  --   ------
+ 0
+ 4
+ 8
+12
+16
+20
+24
+28
+32
+36
+
+>> C3: Did any ambiguities in the scheduler specification make values
+>> in the table uncertain?  If so, what rule did you use to resolve
+>> them?  Does this match the behavior of your scheduler?
+
+>> C4: How is the way you divided the cost of scheduling between code
+>> inside and outside interrupt context likely to affect performance?
+
+---- RATIONALE ----
+
+>> C5: Briefly critique your design, pointing out advantages and
+>> disadvantages in your design choices.  If you were to have extra
+>> time to work on this part of the project, how might you choose to
+>> refine or improve your design?
+

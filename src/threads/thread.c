@@ -453,9 +453,13 @@ thread_set_priority (int new_priority)
 {
   struct thread *current = thread_current ();
   struct thread *readyMax;
+  enum intr_level old_level;
 
   current->priority_orig = new_priority;
   current->priority = get_largest_donation(current->donations, new_priority);
+
+
+  old_level = intr_disable();
 
   list_sort(&ready_list, &priority_compare_thread, NULL);
   
@@ -464,6 +468,8 @@ thread_set_priority (int new_priority)
   } else {
     readyMax = idle_thread;
   }
+
+  intr_set_level(old_level);
 
   if (readyMax->priority > new_priority)
     thread_yield();
