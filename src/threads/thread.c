@@ -433,13 +433,23 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+
+  list_sort(&ready_list, &priority_compare, NULL);
+
+  // TODO turn off inturrupts?
+
+  struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
+
+  if (t->priority > new_priority)
+    thread_yield();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  struct thread *t = thread_current ();
+  return get_largest_donation(t->donations, t->priority);
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -562,6 +572,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   sema_init(&t->timer_sem, 0);
   t->wake_time = -1;
+
+  t->priority_orig = priority;
+  t->donations = NULL;
+  t->donatee_lock = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
